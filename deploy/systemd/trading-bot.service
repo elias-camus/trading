@@ -1,0 +1,16 @@
+[Unit]
+Description=Trading Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/trading
+ExecStartPre=-/usr/bin/docker rm -f trading-bot
+ExecStart=/usr/bin/docker run --rm --name trading-bot -p 9464:9464 -v /opt/trading/data:/app/data trading-bot:latest
+ExecStop=/usr/bin/docker stop trading-bot
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

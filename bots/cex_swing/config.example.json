@@ -1,0 +1,24 @@
+{
+  "bot": {
+    "name": "paper-cex-swing",
+    "environment": "dev",
+    "data_dir": "data/runtime",
+    "metrics_host": "127.0.0.1",
+    "metrics_port": 9100,
+    "loop_interval_ms": 200,
+    "max_iterations": 10,
+    "live_execution_enabled": false
+  },
+  "risk": {
+    "max_position_notional": 2000.0,
+    "max_daily_loss": 300.0,
+    "max_consecutive_losses": 3,
+    "min_order_interval_seconds": 3
+  },
+  "strategy": {
+    "symbol": "BTCUSDT",
+    "base_price": 65000.0,
+    "signal_threshold_bps": 8.0,
+    "order_notional": 250.0
+  }
+}

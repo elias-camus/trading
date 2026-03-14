@@ -1,0 +1,17 @@
+[Unit]
+Description=Trading Bot Stack
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/trading
+RemainAfterExit=yes
+ExecStart=/usr/bin/docker compose -f docker-compose.aws.yml up -d --build
+ExecStop=/usr/bin/docker compose -f docker-compose.aws.yml down
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target
+

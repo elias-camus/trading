@@ -1,0 +1,30 @@
+groups:
+  - name: trading-bot
+    rules:
+      - alert: TradingBotMetricsDown
+        expr: up{job="trading-bot"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "trading-bot の metrics が取得できません"
+          description: "9464 の /metrics に 2 分以上アクセスできていません。"
+
+      - alert: TradingBotLossLimitApproaching
+        expr: daily_realized_pnl < -200
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "日次損失が閾値に近づいています"
+          description: "daily_realized_pnl が -200 を下回っています。"
+
+      - alert: TradingBotConsecutiveLosses
+        expr: consecutive_losses >= 2
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "連敗が増えています"
+          description: "consecutive_losses が 2 以上です。"
+

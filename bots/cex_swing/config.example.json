@@ -6,8 +6,7 @@
     "metrics_host": "127.0.0.1",
     "metrics_port": 9100,
     "loop_interval_ms": 200,
-    "max_iterations": 10,
-    "live_execution_enabled": false
+    "max_iterations": 10
   },
   "risk": {
     "max_position_notional": 2000.0,
@@ -19,6 +18,30 @@
     "symbol": "BTCUSDT",
     "base_price": 65000.0,
     "signal_threshold_bps": 8.0,
+    "metadata": {
+      "profile": "sample"
+    }
+  },
+  "market_data": {
+    "adapter": "synthetic",
+    "venue": {
+      "name": "synthetic-feed",
+      "kind": "research",
+      "symbol": "BTCUSDT"
+    },
+    "poll_interval_ms": 0,
+    "record_trades": false,
+    "record_orderbook": false
+  },
+  "execution": {
+    "mode": "paper",
+    "adapter": "paper",
+    "venue": {
+      "name": "paper-execution",
+      "kind": "paper",
+      "symbol": "BTCUSDT"
+    },
     "order_notional": 250.0
-  }
+  },
+  "credentials": {}
 }

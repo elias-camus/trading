@@ -27,6 +27,33 @@ services:
       - ./data/prometheus:/prometheus
     depends_on:
       - trading-bot
+      - alertmanager
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    container_name: trading-alertmanager
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./deploy/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    depends_on:
+      - discord-relay
+
+  discord-relay:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: trading-discord-relay
+    restart: unless-stopped
+    command: ["python", "-m", "trading_bot.alerting.discord_relay"]
+    environment:
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      PORT: "9094"
+    ports:
+      - "9094:9094"
 
   grafana:
     image: grafana/grafana:11.1.4
@@ -42,4 +69,3 @@ services:
       - ./data/grafana:/var/lib/grafana
     depends_on:
       - prometheus
-

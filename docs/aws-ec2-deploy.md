@@ -29,6 +29,7 @@
   - `22/tcp`: 自分のIPだけ許可
   - `9464/tcp`: 自分のIPだけ許可
   - `9090/tcp`: 必要なら自分のIPだけ許可
+  - `9093/tcp`: 必要なら自分のIPだけ許可
   - `3000/tcp`: 必要なら自分のIPだけ許可
 - IAM:
   - 最初は EC2 ロール最小権限
@@ -74,6 +75,7 @@
 - Docker 起動時の公開ポート: `9464:9464`
 - 監視スタック: `docker-compose.aws.yml`
 - Prometheus 設定: `deploy/prometheus/prometheus.yml`
+- Alertmanager 設定: `deploy/alertmanager/alertmanager.yml`
 - Grafana: `3000`
 
 `config.aws.json` は次の意図で作っている。
@@ -118,6 +120,7 @@ curl http://127.0.0.1:9464/metrics
 cd /opt/trading
 docker compose -f docker-compose.aws.yml up -d --build
 curl http://127.0.0.1:9090/-/ready
+curl http://127.0.0.1:9093/-/ready
 ```
 
 ## systemd 常駐化
@@ -149,7 +152,7 @@ sudo systemctl status trading-stack
 - まずは紙上実行のまま回す
 - API キーはまだコンテナに入れない
 - `9464` は全世界公開せず、自分のIPに絞る
-- `9090` と `3000` も全世界公開しない
+- `9090`, `9093`, `3000` も全世界公開しない
 - 実取引用 Bot を動かす前に CloudWatch Logs か Loki 系へログ転送を足す
 - 本番では `/metrics` と取引系ポートを分離する
 
@@ -160,7 +163,7 @@ sudo systemctl status trading-stack
 - Grafana で `loop_latency_ms`, `risk_blocks_total`, `daily_realized_pnl` を可視化する
 - Secrets Manager から API キーを読む構成にする
 - Grafana の初期パスワードはデフォルトのまま使わず変更する
-- Discord 通知を Alertmanager 経由で追加する
+- `DISCORD_WEBHOOK_URL` を env 直書きから Secrets Manager 参照へ移す
 
 基盤完成までの全体 TODO は [TODO.md](/Users/toshikikobayashi/Repositories/trading/TODO.md) を参照。
 

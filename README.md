@@ -8,13 +8,16 @@
 
 - 共通基盤
   - 設定読み込み
+  - market data / execution adapter の interface
   - メトリクス管理
   - NDJSON レコーダー
   - リスクガード
   - 単一起動ロック
+  - credential resolver
 - サンプルBot
   - CEX 向けの紙上実行Bot
   - 疑似シグナルを使って記録・判定・紙上約定まで流す
+  - recorder を読む集計 CLI
 
 ## 現在地
 
@@ -23,6 +26,7 @@
 - できていること
   - 紙上実行Botを動かす
   - recorder に記録する
+  - recorder の日次集計を出す
   - `/metrics` を出す
   - EC2 へ常駐配備する
   - Prometheus / Grafana で監視する
@@ -62,6 +66,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
 trading-bot run-paper-bot --config bots/cex_swing/config.example.json
+trading-bot summarize-records --root data/runtime/records --bot paper-cex-swing
 ```
 
 依存をまだ入れたくない場合は、次でも動きます。
@@ -69,9 +74,28 @@ trading-bot run-paper-bot --config bots/cex_swing/config.example.json
 ```bash
 cd /Users/toshikikobayashi/Repositories/trading
 PYTHONPATH=src python3 -m trading_bot run-paper-bot --config bots/cex_swing/config.example.json
+PYTHONPATH=src python3 -m trading_bot summarize-records --root data/runtime/records --bot paper-cex-swing
 ```
 
 このサンプルBotは紙上実行専用です。取引所 API を叩かずに、疑似的な market snapshot を生成し、判定・リスクチェック・紙上約定・日次レポート記録まで確認できます。
+
+設定は `bot / risk / strategy / market_data / execution / credentials` に分かれています。`execution.mode` は `paper / dry-run / live` を想定し、現時点では `paper` と `dry-run` を利用できます。
+
+## テスト
+
+標準の実行経路は次です。
+
+```bash
+cd /Users/toshikikobayashi/Repositories/trading
+python3 -m unittest discover -s tests -t . -v
+```
+
+または:
+
+```bash
+cd /Users/toshikikobayashi/Repositories/trading
+make test
+```
 
 AWS EC2 へ 24時間365日で常駐配備する場合は [aws-ec2-deploy.md](/Users/toshikikobayashi/Repositories/trading/docs/aws-ec2-deploy.md) を参照してください。
 
@@ -96,6 +120,11 @@ curl http://127.0.0.1:9464/metrics
 
 監視込みで起動する場合:
 
+- Prometheus
+- Alertmanager
+- Discord relay
+- Grafana
+
 ```bash
 cd /Users/toshikikobayashi/Repositories/trading
 docker compose -f docker-compose.aws.yml up -d --build
@@ -105,12 +134,23 @@ docker compose -f docker-compose.aws.yml up -d --build
 
 - Bot metrics: `http://127.0.0.1:9464/metrics`
 - Prometheus: `http://127.0.0.1:9090`
+- Alertmanager: `http://127.0.0.1:9093`
 - Grafana: `http://127.0.0.1:3000`
 
 ## 出力先
 
 - 実行ログ相当のイベントは `data/runtime/records/` 以下に日付ごとに保存されます
 - `runtime/`, `market_snapshots/`, `decisions/`, `paper_fills/`, `risk_events/`, `reports/` に分かれます
+
+集計例:
+
+```bash
+cd /Users/toshikikobayashi/Repositories/trading
+PYTHONPATH=src python3 -m trading_bot summarize-records \
+  --root data/runtime/records \
+  --bot paper-cex-swing \
+  --output data/runtime/summary-paper-cex-swing.json
+```
 
 ## 補足
 

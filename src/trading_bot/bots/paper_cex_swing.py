@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import random
 import time
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -11,14 +9,8 @@ from trading_bot.core.metrics import MetricsRegistry, MetricsServer
 from trading_bot.core.recorder import EventRecorder
 from trading_bot.core.risk import RiskManager
 from trading_bot.core.runtime import RunLock, config_fingerprint
-
-
-@dataclass
-class MarketSnapshot:
-    symbol: str
-    price: float
-    signal_bps: float
-    ts: str
+from trading_bot.execution.factory import build_execution_adapter
+from trading_bot.market_data.factory import build_market_data_adapter
 
 
 def run_paper_cex_swing(config_path: Path) -> None:
@@ -33,14 +25,23 @@ def run_paper_cex_swing(config_path: Path) -> None:
         config.bot.metrics_port,
         registry,
     )
+    market_data = build_market_data_adapter(config)
+    execution = build_execution_adapter(config)
 
     lock_path = data_dir / "locks" / f"{config.bot.name}.lock"
     with RunLock(lock_path):
         metrics_available = metrics_server.start()
         try:
-            _record_runtime_metadata(config, recorder, registry, metrics_available, metrics_server.start_error)
-            _run_loop(config, recorder, registry, risk)
+            _record_runtime_metadata(
+                config,
+                recorder,
+                registry,
+                metrics_available,
+                metrics_server.start_error,
+            )
+            _run_loop(config, recorder, registry, risk, market_data, execution)
         finally:
+            market_data.close()
             metrics_server.stop()
 
 
@@ -49,6 +50,8 @@ def _run_loop(
     recorder: EventRecorder,
     registry: MetricsRegistry,
     risk: RiskManager,
+    market_data: object,
+    execution: object,
 ) -> None:
     wins = 0
     losses = 0
@@ -58,8 +61,8 @@ def _run_loop(
         if config.bot.max_iterations > 0 and iteration >= config.bot.max_iterations:
             break
         started_at = time.perf_counter()
-        snapshot = _generate_snapshot(config)
-        recorder.record("market_snapshots", snapshot.__dict__)
+        snapshot = market_data.get_snapshot()
+        recorder.record("market_snapshots", snapshot.to_record())
         registry.set_gauge("market_price", snapshot.price)
         registry.set_gauge("signal_bps", snapshot.signal_bps)
         registry.set_gauge("iterations_total", float(iteration + 1))
@@ -72,6 +75,7 @@ def _run_loop(
                     "action": "hold",
                     "reason": "signal_below_threshold",
                     "signal_bps": snapshot.signal_bps,
+                    "venue": snapshot.venue,
                 },
             )
             registry.inc_counter("bot_holds_total")
@@ -79,7 +83,7 @@ def _run_loop(
             iteration += 1
             continue
 
-        can_trade, reason = risk.can_open_order(config.strategy.order_notional)
+        can_trade, reason = risk.can_open_order(config.execution.order_notional)
         if not can_trade:
             recorder.record(
                 "risk_events",
@@ -87,6 +91,7 @@ def _run_loop(
                     "iteration": iteration,
                     "blocked_reason": reason,
                     "signal_bps": snapshot.signal_bps,
+                    "venue": snapshot.venue,
                 },
             )
             registry.inc_counter("risk_blocks_total")
@@ -95,9 +100,9 @@ def _run_loop(
             continue
 
         side = "buy" if snapshot.signal_bps > 0 else "sell"
-        realized_pnl = _simulate_fill(snapshot.signal_bps, config.strategy.order_notional)
-        risk.register_fill(config.strategy.order_notional, realized_pnl)
-        if realized_pnl >= 0:
+        execution_result = execution.execute(snapshot, side, config.execution.order_notional)
+        risk.register_fill(config.execution.order_notional, execution_result.realized_pnl)
+        if execution_result.realized_pnl >= 0:
             wins += 1
         else:
             losses += 1
@@ -106,13 +111,8 @@ def _run_loop(
             "paper_fills",
             {
                 "iteration": iteration,
-                "side": side,
-                "symbol": config.strategy.symbol,
-                "price": snapshot.price,
+                **execution_result.to_record(),
                 "signal_bps": snapshot.signal_bps,
-                "order_notional": config.strategy.order_notional,
-                "realized_pnl": realized_pnl,
-                "live_execution_enabled": config.bot.live_execution_enabled,
             },
         )
         risk.flatten_position()
@@ -124,19 +124,6 @@ def _run_loop(
         _finish_iteration(started_at, registry, config)
         iteration += 1
 
-    if iteration == 0:
-        recorder.record(
-            "reports",
-            {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
-                "wins": wins,
-                "losses": losses,
-                "daily_realized_pnl": risk.state.daily_realized_pnl,
-                "consecutive_losses": risk.state.consecutive_losses,
-            },
-        )
-        return
-
     recorder.record(
         "reports",
         {
@@ -145,6 +132,8 @@ def _run_loop(
             "losses": losses,
             "daily_realized_pnl": risk.state.daily_realized_pnl,
             "consecutive_losses": risk.state.consecutive_losses,
+            "execution_mode": config.execution.mode,
+            "market_data_adapter": config.market_data.adapter,
         },
     )
 
@@ -162,32 +151,18 @@ def _record_runtime_metadata(
             "bot_name": config.bot.name,
             "environment": config.bot.environment,
             "config_fingerprint": config_fingerprint(config),
-            "live_execution_enabled": config.bot.live_execution_enabled,
+            "market_data_adapter": config.market_data.adapter,
+            "market_data_venue": config.market_data.venue.name,
+            "execution_adapter": config.execution.adapter,
+            "execution_mode": config.execution.mode,
+            "credentials_ref": config.execution.credentials_ref,
             "metrics_endpoint": f"http://{config.bot.metrics_host}:{config.bot.metrics_port}/metrics",
             "metrics_http_enabled": metrics_available,
             "metrics_start_error": metrics_start_error,
         },
     )
-    registry.set_gauge("live_execution_enabled", 1.0 if config.bot.live_execution_enabled else 0.0)
+    registry.set_gauge("execution_mode_live", 1.0 if config.execution.mode == "live" else 0.0)
     registry.set_gauge("metrics_http_enabled", 1.0 if metrics_available else 0.0)
-
-
-def _generate_snapshot(config: AppConfig) -> MarketSnapshot:
-    signal_bps = random.uniform(-20.0, 20.0)
-    price = config.strategy.base_price * (1 + signal_bps / 10000)
-    return MarketSnapshot(
-        symbol=config.strategy.symbol,
-        price=round(price, 2),
-        signal_bps=round(signal_bps, 2),
-        ts=datetime.now(timezone.utc).isoformat(),
-    )
-
-
-def _simulate_fill(signal_bps: float, order_notional: float) -> float:
-    edge = abs(signal_bps) / 10000 * order_notional
-    friction = order_notional * 0.0006
-    noise = random.uniform(-0.6, 0.6)
-    return round(edge - friction + noise, 4)
 
 
 def _finish_iteration(

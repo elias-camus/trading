@@ -1,0 +1,17 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: discord-relay
+  group_by:
+    - alertname
+    - severity
+  group_wait: 10s
+  group_interval: 30s
+  repeat_interval: 4h
+
+receivers:
+  - name: discord-relay
+    webhook_configs:
+      - url: http://discord-relay:9094/alert
+        send_resolved: true

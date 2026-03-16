@@ -33,6 +33,8 @@ class MarketDataConfig:
     record_trades: bool = False
     record_orderbook: bool = False
     credentials_ref: str | None = None
+    product_code: str = "BTC_JPY"
+    min_interval_sec: float = 1.0
 
 
 @dataclass
@@ -117,13 +119,18 @@ def _parse_venue(raw: dict[str, object]) -> VenueConfig:
 
 
 def _parse_market_data(raw: dict[str, object]) -> MarketDataConfig:
+    adapter = raw.get("adapter", raw.get("source"))
+    if adapter is None:
+        raise KeyError("market_data.adapter")
     return MarketDataConfig(
-        adapter=str(raw["adapter"]),
+        adapter=str(adapter),
         venue=_parse_venue(dict(raw["venue"])),
         poll_interval_ms=int(raw.get("poll_interval_ms", 0)),
         record_trades=bool(raw.get("record_trades", False)),
         record_orderbook=bool(raw.get("record_orderbook", False)),
         credentials_ref=_optional_str(raw.get("credentials_ref")),
+        product_code=str(raw.get("product_code", "BTC_JPY")),
+        min_interval_sec=float(raw.get("min_interval_sec", 1.0)),
     )
 
 

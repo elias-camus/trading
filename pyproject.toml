@@ -11,7 +11,7 @@ requires-python = ">=3.9"
 authors = [
   { name = "Toshiki Kobayashi" }
 ]
-dependencies = []
+dependencies = ["requests>=2.31"]
 
 [project.optional-dependencies]
 aws = ["boto3>=1.34"]

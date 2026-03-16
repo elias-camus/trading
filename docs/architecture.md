@@ -24,6 +24,14 @@
   - 共通モジュールを使うサンプルの紙上実行Bot
   - `max_iterations=0` のときは常駐実行する
 
+## BitFlyer adapter
+
+- `trading_bot.market_data.bitflyer.BitFlyerMarketDataAdapter`
+  - BitFlyer HTTP Public API の `getticker` を使って `MarketSnapshot` を生成する
+  - `ltp` を価格、`timestamp` を UTC 文字列として取り込み、`best_bid`、`best_ask`、`volume_by_product` は metadata に保持する
+  - adapter 自体では売買シグナルを持たず、`signal_bps=0.0` を返す
+  - 同一 IP あたり 5 分 500 回の公開 API 制限を踏まえ、`min_interval_sec` で最低呼び出し間隔を制御する
+
 ## 実行フロー
 
 1. Bot 設定を読み込む

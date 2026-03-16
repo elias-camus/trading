@@ -21,17 +21,17 @@
 
 ## 現在地
 
-いまは「基盤の骨組みはあるが、実データ adapter と実注文 adapter は未実装」の段階です。
+いまは「基盤の骨組みがあり、BitFlyer の実データ adapter は実装済みだが、実注文 adapter は未実装」の段階です。
 
 - できていること
   - 紙上実行Botを動かす
+  - BitFlyer HTTP Public API から ticker を取得する
   - recorder に記録する
   - recorder の日次集計を出す
   - `/metrics` を出す
   - EC2 へ常駐配備する
   - Prometheus / Grafana で監視する
 - これから必要なこと
-  - 実取引所データの取得
   - 実注文の送信
   - 秘密情報の安全な取り扱い
   - 新規Botを量産するためのテンプレート化
@@ -77,7 +77,7 @@ PYTHONPATH=src python3 -m trading_bot run-paper-bot --config bots/cex_swing/conf
 PYTHONPATH=src python3 -m trading_bot summarize-records --root data/runtime/records --bot paper-cex-swing
 ```
 
-このサンプルBotは紙上実行専用です。取引所 API を叩かずに、疑似的な market snapshot を生成し、判定・リスクチェック・紙上約定・日次レポート記録まで確認できます。
+このサンプルBotは紙上実行専用です。`market_data.adapter=synthetic` では疑似 snapshot、`market_data.adapter=bitflyer` または `market_data.source=bitflyer` では BitFlyer の public ticker を取得し、判定・リスクチェック・紙上約定・日次レポート記録まで確認できます。
 
 設定は `bot / risk / strategy / market_data / execution / credentials` に分かれています。`execution.mode` は `paper / dry-run / live` を想定し、現時点では `paper` と `dry-run` を利用できます。
 

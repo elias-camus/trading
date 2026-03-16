@@ -22,6 +22,9 @@
   - cloud-init
   - systemd
   - deploy script
+- BitFlyer adapter
+  - HTTP Public API の market data
+  - Private API の実注文 dry-run / live
 - 監視の骨組み
   - Prometheus
   - Grafana
@@ -31,7 +34,6 @@
 
 - 日本居住者向けの取引所選定
 - 実取引所データ adapter
-- 実売買 adapter
 - Secrets Manager 連携
 - ログ集約
 - バックテスト/分析ジョブ
@@ -65,7 +67,7 @@
 
 ### 優先度B: 実運用に近づける
 
-- 実注文 adapter を作る
+- [x] 実注文 adapter を作る
   - paper
   - dry-run
   - live の 3 モード

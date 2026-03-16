@@ -43,5 +43,11 @@
     },
     "order_notional": 250.0
   },
-  "credentials": {}
+  "credentials": {
+    "bitflyer": {
+      "provider": "env",
+      "api_key_env": "BITFLYER_API_KEY",
+      "api_secret_env": "BITFLYER_API_SECRET"
+    }
+  }
 }

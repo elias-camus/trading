@@ -21,18 +21,18 @@
 
 ## 現在地
 
-いまは「基盤の骨組みがあり、BitFlyer の実データ adapter は実装済みだが、実注文 adapter は未実装」の段階です。
+いまは「基盤の骨組みがあり、BitFlyer の実データ adapter と実注文 adapter が入った段階」です。
 
 - できていること
   - 紙上実行Botを動かす
   - BitFlyer HTTP Public API から ticker を取得する
+  - BitFlyer Private API へ dry-run / live で注文を組み立てて送る
   - recorder に記録する
   - recorder の日次集計を出す
   - `/metrics` を出す
   - EC2 へ常駐配備する
   - Prometheus / Grafana で監視する
 - これから必要なこと
-  - 実注文の送信
   - 秘密情報の安全な取り扱い
   - 新規Botを量産するためのテンプレート化
 
@@ -77,9 +77,17 @@ PYTHONPATH=src python3 -m trading_bot run-paper-bot --config bots/cex_swing/conf
 PYTHONPATH=src python3 -m trading_bot summarize-records --root data/runtime/records --bot paper-cex-swing
 ```
 
-このサンプルBotは紙上実行専用です。`market_data.adapter=synthetic` では疑似 snapshot、`market_data.adapter=bitflyer` または `market_data.source=bitflyer` では BitFlyer の public ticker を取得し、判定・リスクチェック・紙上約定・日次レポート記録まで確認できます。
+このサンプルBotは紙上実行か BitFlyer 注文 dry-run/live の設定例を含みます。`market_data.adapter=synthetic` では疑似 snapshot、`market_data.adapter=bitflyer` または `market_data.source=bitflyer` では BitFlyer の public ticker を取得し、判定・リスクチェック・約定送信まで確認できます。
 
-設定は `bot / risk / strategy / market_data / execution / credentials` に分かれています。`execution.mode` は `paper / dry-run / live` を想定し、現時点では `paper` と `dry-run` を利用できます。
+設定は `bot / risk / strategy / market_data / execution / credentials` に分かれています。`execution.mode` は `paper / dry-run / live` を想定し、`execution.adapter` は `paper` / `dry-run` / `bitflyer-dry-run` / `bitflyer-live` を利用できます。
+
+### BitFlyer execution adapter
+
+- `src/trading_bot/execution/bitflyer.py` に BitFlyer Private API 向けの execution adapter を追加しています
+- `bitflyer-dry-run` は署名とリクエスト payload を生成しますが、HTTP 送信は行いません
+- `bitflyer-live` は `POST /v1/me/sendchildorder` を送信し、`child_order_acceptance_id` を execution metadata に保存します
+- 認証情報は `execution.credentials_ref` から `credentials` セクションを引き、`env` / `inline` / `aws_secrets_manager` を使えます
+- dry-run の設定例は [config.bitflyer-dry-run.example.json](/home/ubuntu/.openclaw/workspace/trading/bots/cex_swing/config.bitflyer-dry-run.example.json) を参照してください。既存の paper 設定は [config.example.json](/home/ubuntu/.openclaw/workspace/trading/bots/cex_swing/config.example.json) に残しています
 
 ## テスト
 

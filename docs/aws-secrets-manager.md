@@ -80,22 +80,20 @@ export DISCORD_WEBHOOK_SECRET_NAME=trading-bot/discord-webhook
 export AWS_REGION=ap-northeast-1
 ```
 
-OpenClaw の既存 Discord Bot を使う場合は Webhook URL を発行せず、OpenClaw が動いているサーバーで次を設定します。
+Discord Bot Token を使う場合は、既存の Discord Bot の token と通知先チャンネル ID を設定します。
 
 ```bash
-export DISCORD_BOT_TOKEN=YOUR_OPENCLAW_BOT_TOKEN
+export DISCORD_BOT_TOKEN=YOUR_BOT_TOKEN
 export DISCORD_CHANNEL_ID=123456789012345678
 ```
 
-- `DISCORD_BOT_TOKEN`: サーバー上で既に運用している Discord Bot の token
+- `DISCORD_BOT_TOKEN`: Discord Bot の token
 - `DISCORD_CHANNEL_ID`: 通知を受けたい Discord チャンネル ID
 
-`docker-compose.aws.yml` で渡す場合は次のように `.env` か shell 環境変数へ設定します。
+`docker-compose.aws.yml` で渡す場合は `.env` か shell 環境変数へ設定します。
 
 ```bash
-export DISCORD_WEBHOOK_URL=
-export DISCORD_WEBHOOK_SECRET_NAME=
-export DISCORD_BOT_TOKEN=YOUR_OPENCLAW_BOT_TOKEN
+export DISCORD_BOT_TOKEN=YOUR_BOT_TOKEN
 export DISCORD_CHANNEL_ID=123456789012345678
 export AWS_REGION=ap-northeast-1
 docker compose -f docker-compose.aws.yml up -d --build

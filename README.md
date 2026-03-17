@@ -1,175 +1,143 @@
 # trading
 
-仮想通貨Bot、共有ランタイム、検証ワークフローを育てていくための Python ベースの土台です。
+仮想通貨の自動売買 Bot を量産・運用するための Python フレームワーク。
 
 ## 概要
 
-現在は次のものが入っています。
+基盤（データ取得・注文・リスク管理・記録・監視・通知・デプロイ）は完成済み。
+**やるべきことは戦略ロジックの開発とテスト。**
 
-- 共通基盤
-  - 設定読み込み
-  - market data / execution adapter の interface
-  - メトリクス管理
-  - NDJSON レコーダー
-  - リスクガード
-  - 単一起動ロック
-  - credential resolver
-- サンプルBot
-  - CEX 向けの紙上実行Bot
-  - 疑似シグナルを使って記録・判定・紙上約定まで流す
-  - recorder を読む集計 CLI
+### 主要機能
 
-## 現在地
+- **Market Data**: BitFlyer HTTP Public API (ticker) / Synthetic (テスト用)
+- **Strategy**: 戦略ロジックの抽象化 (Strategy ABC + factory pattern)
+- **Execution**: paper (模擬) / dry-run / live (BitFlyer Private API)
+- **Risk**: 連敗上限、日次損失上限、ポジション上限、注文間隔
+- **Recording**: NDJSON イベント記録 + 日次集計 CLI
+- **Monitoring**: Prometheus / Grafana / Alertmanager / Discord 通知
+- **Secrets**: AWS Secrets Manager / 環境変数 / inline
+- **Deploy**: Docker Compose + systemd (AWS Lightsail)
+- **Graceful Shutdown**: SIGTERM/SIGINT ハンドリング
+- **Structured Logging**: JSON-line 形式 (CloudWatch/Loki 互換)
 
-いまは「共通基盤が通り、BitFlyer 実データ・実注文・通知・Secrets・分析の最小ループが揃った段階」です。
+## Bot の動作フロー
 
-- できていること
-  - 紙上実行Botを動かす
-  - BitFlyer HTTP Public API から ticker を取得する
-  - BitFlyer Private API へ dry-run / live で注文を組み立てて送る
-  - recorder に記録する
-  - recorder の日次集計を出す
-  - Bot テンプレートから新規 Bot を最小差分で追加する
-  - `/metrics` を出す
-  - EC2 へ常駐配備する
-  - Prometheus / Grafana で監視する
-  - Discord 通知を Webhook / Bot Token の両方で送る
-  - Secrets Manager から API キーや Discord Webhook を解決する
-  - 分析ジョブで勝率・損益・スリッページを集計する
-- これから必要なこと
-  - CloudWatch Logs か Loki へのログ転送
-  - 実運用向けの戦略ロジック実装
-  - backtest / replay 基盤の整備
+```
+[Market Data] → snapshot 取得
+    ↓
+[Strategy] → compute_signal_bps(snapshot) → signal_bps
+    ↓
+[Threshold Check] → abs(signal_bps) < threshold なら見送り
+    ↓
+[Risk Check] → 連敗/日次損失/ポジション上限/間隔チェック
+    ↓
+[Execution] → paper(模擬) / dry-run / live
+    ↓
+[Recorder] → NDJSON で全イベント記録
+```
 
-残タスクの要約は [TODO.md](/Users/toshikikobayashi/Repositories/trading/TODO.md) にまとめています。
+## 戦略を追加する手順
 
-## 取引所の前提
+CLAUDE.md に詳しく書いてある。要約:
 
-日本居住者前提では、海外取引所の現物・先物・レバレッジ商品をそのまま実運用対象にするのは危ないです。
+1. `src/trading_bot/strategy/` に Strategy クラスを作る
+2. `src/trading_bot/strategy/factory.py` に登録する
+3. `bots/` に config.json を作る
+4. `tests/test_strategy.py` にテストを追加する
+5. `PYTHONPATH=src python3 -m trading_bot run-paper-bot --config bots/my_bot/config.json` で実行
 
-- `Binance` と `Bybit` は日本居住者向けの扱いを商品単位で毎回確認する必要がある
-- 実運用の初期対象は、国内登録業者かつ API 提供が明示されている取引所を優先する
-- 海外取引所は、まず研究用データ取得や比較用途として切り分ける
+## 既存の戦略
 
-この前提で、最初の live 候補は国内業者向け adapter を優先して作る想定です。
+| 名前 | ファイル | 説明 |
+|---|---|---|
+| passthrough | `strategy/passthrough.py` | snapshot の signal_bps をそのまま返す（後方互換用） |
+| momentum | `strategy/momentum.py` | 直近 N 個の価格から rate-of-change を bps で返す |
 
 ## ディレクトリ構成
 
-- `src/trading_bot/`: 共通ランタイムとサンプルBot実装
-- `bots/`: Bot ごとの設定ファイル置き場
-- `data/`: 実行時に生成される記録とレポート
-- `deploy/`: 配備用ファイル
-- `docs/`: 設計メモと運用メモ
-- `scripts/`: EC2 更新や配備用スクリプト
-- `tests/`: 共通基盤の基本テスト
+- `src/trading_bot/` — 共通ランタイムと Bot 実装
+  - `strategy/` — 戦略ロジック (ここに新しい戦略を書く)
+  - `core/` — 設定、メトリクス、記録、リスク管理、ログ
+  - `bots/` — Bot 実装
+  - `execution/` — 注文実行アダプタ
+  - `market_data/` — 市場データアダプタ
+  - `alerting/` — Discord 通知
+- `bots/` — Bot ごとの設定ファイル
+- `data/` — 実行時に生成される記録とレポート
+- `deploy/` — 配備用ファイル (Prometheus, Grafana, Alertmanager)
+- `docs/` — 設計メモと運用メモ
+- `tests/` — テスト
 
-## 使い方
+## セットアップ
 
 ```bash
 cd /Users/toshikikobayashi/Repositories/trading
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
-trading-bot run-paper-bot --config bots/cex_swing/config.example.json
-trading-bot summarize-records --root data/runtime/records --bot paper-cex-swing
 ```
 
-依存をまだ入れたくない場合は、次でも動きます。
+## 使い方
 
 ```bash
-cd /Users/toshikikobayashi/Repositories/trading
+# Paper bot (synthetic data)
 PYTHONPATH=src python3 -m trading_bot run-paper-bot --config bots/cex_swing/config.example.json
+
+# Paper bot (BitFlyer real data + momentum strategy)
+PYTHONPATH=src python3 -m trading_bot run-paper-bot --config bots/cex_swing/config.bitflyer-momentum.json
+
+# 集計
 PYTHONPATH=src python3 -m trading_bot summarize-records --root data/runtime/records --bot paper-cex-swing
 ```
 
-このサンプルBotは紙上実行か BitFlyer 注文 dry-run/live の設定例を含みます。`market_data.adapter=synthetic` では疑似 snapshot、`market_data.adapter=bitflyer` または `market_data.source=bitflyer` では BitFlyer の public ticker を取得し、判定・リスクチェック・約定送信まで確認できます。
-
-設定は `bot / risk / strategy / market_data / execution / credentials` に分かれています。`execution.mode` は `paper / dry-run / live` を想定し、`execution.adapter` は `paper` / `dry-run` / `bitflyer-dry-run` / `bitflyer-live` を利用できます。
-
-### BitFlyer execution adapter
-
-- `src/trading_bot/execution/bitflyer.py` に BitFlyer Private API 向けの execution adapter を追加しています
-- `bitflyer-dry-run` は署名とリクエスト payload を生成しますが、HTTP 送信は行いません
-- `bitflyer-live` は `POST /v1/me/sendchildorder` を送信し、`child_order_acceptance_id` を execution metadata に保存します
-- 認証情報は `execution.credentials_ref` から `credentials` セクションを引き、`env` / `inline` / `aws_secrets_manager` を使えます
-- dry-run の設定例は [config.bitflyer-dry-run.example.json](/home/ubuntu/.openclaw/workspace/trading/bots/cex_swing/config.bitflyer-dry-run.example.json) を参照してください
-- live + Secrets Manager の設定例は [config.bitflyer-live-secrets.example.json](/home/ubuntu/.openclaw/workspace/trading/bots/cex_swing/config.bitflyer-live-secrets.example.json) を参照してください
-- 既存の paper 設定は [config.example.json](/home/ubuntu/.openclaw/workspace/trading/bots/cex_swing/config.example.json) に残しています
-
 ## テスト
 
-標準の実行経路は次です。
-
 ```bash
 cd /Users/toshikikobayashi/Repositories/trading
-python3 -m unittest discover -s tests -t . -v
-```
-
-または:
-
-```bash
-cd /Users/toshikikobayashi/Repositories/trading
+PYTHONPATH=src python3 -m unittest discover -s tests -t . -v
+# または
 make test
 ```
 
-AWS EC2 へ 24時間365日で常駐配備する場合は [aws-ec2-deploy.md](/Users/toshikikobayashi/Repositories/trading/docs/aws-ec2-deploy.md) を参照してください。Secrets Manager の登録例は [aws-secrets-manager.md](/home/ubuntu/.openclaw/workspace/trading/docs/aws-secrets-manager.md) にまとめています。
-
-設計の全体像は [architecture.md](/Users/toshikikobayashi/Repositories/trading/docs/architecture.md)、調査整理は [yodakaart-crypto-bot-notes.md](/Users/toshikikobayashi/Repositories/trading/yodakaart-crypto-bot-notes.md)、Discord 通知方針は [discord-alerting.md](/Users/toshikikobayashi/Repositories/trading/docs/discord-alerting.md) を参照してください。
-
 ## Docker 実行
 
-`9464` で `/metrics` を公開する常駐向け Dockerfile を追加済みです。
-
 ```bash
-cd /Users/toshikikobayashi/Repositories/trading
+# Bot 単体
 docker build -t trading-bot:latest .
 docker run --rm -p 9464:9464 -v "$(pwd)/data:/app/data" trading-bot:latest
-```
 
-確認:
-
-```bash
-curl http://127.0.0.1:9464/healthz
-curl http://127.0.0.1:9464/metrics
-```
-
-監視込みで起動する場合:
-
-- Prometheus
-- Alertmanager
-- Discord relay
-- Grafana
-
-```bash
-cd /Users/toshikikobayashi/Repositories/trading
+# 監視込み (Bot + Prometheus + Grafana + Alertmanager + Discord relay)
 docker compose -f docker-compose.aws.yml up -d --build
 ```
 
-主な確認先:
+確認先:
+- Bot metrics: `http://localhost:9464/metrics`
+- Prometheus: `http://localhost:9090`
+- Alertmanager: `http://localhost:9093`
+- Grafana: `http://localhost:3000`
 
-- Bot metrics: `http://127.0.0.1:9464/metrics`
-- Prometheus: `http://127.0.0.1:9090`
-- Alertmanager: `http://127.0.0.1:9093`
-- Grafana: `http://127.0.0.1:3000`
+## 取引所の前提
 
-## 出力先
+日本居住者前提では、海外取引所の商品をそのまま実運用対象にするのは危ない。
 
-- 実行ログ相当のイベントは `data/runtime/records/` 以下に日付ごとに保存されます
-- `runtime/`, `market_snapshots/`, `decisions/`, `paper_fills/`, `risk_events/`, `reports/` に分かれます
+- 実運用の初期対象は国内登録業者 (BitFlyer) を優先
+- 海外取引所は研究用データ取得や比較用途として切り分ける
+- レバレッジやデリバティブは商品提供可否と API 提供可否の両方を確認してから対応する
 
-集計例:
+## 設定
 
-```bash
-cd /Users/toshikikobayashi/Repositories/trading
-PYTHONPATH=src python3 -m trading_bot summarize-records \
-  --root data/runtime/records \
-  --bot paper-cex-swing \
-  --output data/runtime/summary-paper-cex-swing.json
-```
+設定は `bot / risk / strategy / market_data / execution / credentials` に分かれている。
 
-## 補足
+- `execution.adapter`: `paper` / `dry-run` / `bitflyer-dry-run` / `bitflyer-live`
+- `market_data.adapter`: `synthetic` / `bitflyer`
+- `strategy.metadata.strategy_type`: `passthrough` / `momentum`
+- BitFlyer の設定例: `bots/cex_swing/config.bitflyer-*.json`
 
-- サンドボックス環境ではローカル HTTP ポート bind が禁止される場合があります
-- その場合でも Bot 本体は継続し、`metrics_http_enabled=false` を runtime 記録に残します
-- 実機環境では `metrics_host` と `metrics_port` に応じて `/metrics` を公開できます
-- EC2 常駐化の更新用に `scripts/deploy_ec2.sh` を追加しています
+## ドキュメント
+
+- [CLAUDE.md](CLAUDE.md) — 戦略開発ガイド
+- [TODO.md](TODO.md) — 残タスク
+- [docs/architecture.md](docs/architecture.md) — 設計メモ
+- [docs/aws-ec2-deploy.md](docs/aws-ec2-deploy.md) — AWS デプロイ手順
+- [docs/aws-secrets-manager.md](docs/aws-secrets-manager.md) — Secrets Manager 設定
+- [docs/discord-alerting.md](docs/discord-alerting.md) — Discord 通知設定

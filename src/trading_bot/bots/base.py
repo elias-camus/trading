@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import signal
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
 
 from trading_bot.core.config import AppConfig
+from trading_bot.core.logging import setup_logging
 from trading_bot.core.metrics import MetricsRegistry, MetricsServer
 from trading_bot.core.recorder import EventRecorder
 from trading_bot.core.risk import RiskManager
@@ -13,6 +15,8 @@ from trading_bot.execution.base import ExecutionAdapter
 from trading_bot.execution.factory import build_execution_adapter
 from trading_bot.market_data.base import MarketDataAdapter
 from trading_bot.market_data.factory import build_market_data_adapter
+from trading_bot.strategy.base import Strategy
+from trading_bot.strategy.factory import build_strategy
 
 
 class BaseBot(ABC):
@@ -20,6 +24,7 @@ class BaseBot(ABC):
         self.config_path = config_path
         self.config = AppConfig.load(config_path)
         self.data_dir = self._resolve_data_dir(config_path, self.config.bot.data_dir)
+        self.log = setup_logging(self.config.bot.name)
         self.registry = MetricsRegistry()
         self.recorder = EventRecorder(
             root_dir=self.data_dir / "records",
@@ -33,6 +38,8 @@ class BaseBot(ABC):
         )
         self.market_data = self.build_market_data_adapter()
         self.execution = self.build_execution_adapter()
+        self.strategy = self.build_strategy()
+        self._stop_requested = False
 
     def build_market_data_adapter(self) -> MarketDataAdapter:
         return build_market_data_adapter(self.config)
@@ -40,21 +47,36 @@ class BaseBot(ABC):
     def build_execution_adapter(self) -> ExecutionAdapter:
         return build_execution_adapter(self.config)
 
+    def build_strategy(self) -> Strategy:
+        return build_strategy(self.config.strategy)
+
     def run(self) -> None:
         lock_path = self.data_dir / "locks" / f"{self.config.bot.name}.lock"
         with RunLock(lock_path):
-            metrics_available = self.metrics_server.start()
+            prev_sigterm = signal.signal(signal.SIGTERM, self._handle_signal)
+            prev_sigint = signal.signal(signal.SIGINT, self._handle_signal)
             try:
-                self._record_runtime_metadata(
-                    metrics_available,
-                    self.metrics_server.start_error,
-                )
-                self.before_loop()
-                self._run_loop()
-                self.after_loop()
+                self.log.info("bot starting")
+                metrics_available = self.metrics_server.start()
+                try:
+                    self._record_runtime_metadata(
+                        metrics_available,
+                        self.metrics_server.start_error,
+                    )
+                    self.before_loop()
+                    self._run_loop()
+                    self.after_loop()
+                finally:
+                    self.market_data.close()
+                    self.metrics_server.stop()
+                self.log.info("bot stopped")
             finally:
-                self.market_data.close()
-                self.metrics_server.stop()
+                signal.signal(signal.SIGTERM, prev_sigterm)
+                signal.signal(signal.SIGINT, prev_sigint)
+
+    def _handle_signal(self, signum: int, frame: object) -> None:
+        self.log.info("shutdown signal received")
+        self._stop_requested = True
 
     def before_loop(self) -> None:
         return
@@ -75,6 +97,8 @@ class BaseBot(ABC):
             iteration += 1
 
     def should_stop(self, iteration: int) -> bool:
+        if self._stop_requested:
+            return True
         max_iterations = self.config.bot.max_iterations
         return max_iterations > 0 and iteration >= max_iterations
 

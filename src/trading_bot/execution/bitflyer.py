@@ -90,6 +90,9 @@ class BitFlyerExecutionAdapter(ExecutionAdapter):
         fill_price, executed_size = self._fetch_fill_details(snapshot.symbol, str(acceptance_id))
         if fill_price is not None:
             metadata["executed_size"] = f"{executed_size:.8f}"
+            metadata["fill_status"] = "confirmed"
+        else:
+            metadata["fill_status"] = "unconfirmed"
 
         return ExecutionResult(
             mode=self.mode,

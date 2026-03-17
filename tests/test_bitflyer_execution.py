@@ -140,6 +140,7 @@ class BitFlyerExecutionAdapterTest(unittest.TestCase):
         self.assertEqual(result.fill_price, 50001600.0)
         self.assertIsNone(result.realized_pnl)
         self.assertEqual(result.metadata["executed_size"], "0.00500000")
+        self.assertEqual(result.metadata["fill_status"], "confirmed")
 
     def test_live_mode_returns_none_fill_price_when_execution_is_not_ready(self) -> None:
         session = Mock()
@@ -170,6 +171,7 @@ class BitFlyerExecutionAdapterTest(unittest.TestCase):
 
         self.assertIsNone(result.fill_price)
         self.assertIsNone(result.realized_pnl)
+        self.assertEqual(result.metadata["fill_status"], "unconfirmed")
 
     def test_live_mode_requests_executions_by_acceptance_id(self) -> None:
         session = Mock()

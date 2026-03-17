@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -17,6 +18,8 @@ class PaperCexSwingBot(BaseBot):
 
     def run_iteration(self, iteration: int) -> None:
         snapshot = self.market_data.get_snapshot()
+        signal_bps = self.strategy.compute_signal_bps(snapshot)
+        snapshot = replace(snapshot, signal_bps=signal_bps)
         self.recorder.record("market_snapshots", snapshot.to_record())
         self.registry.set_gauge("market_price", snapshot.price)
         self.registry.set_gauge("signal_bps", snapshot.signal_bps)

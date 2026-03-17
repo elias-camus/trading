@@ -58,9 +58,11 @@ class PaperCexSwingBot(BaseBot):
         )
         self.risk.register_fill(
             self.config.execution.order_notional,
-            execution_result.realized_pnl,
+            execution_result.realized_pnl or 0.0,
         )
-        if execution_result.realized_pnl >= 0:
+        if execution_result.realized_pnl is None:
+            pass
+        elif execution_result.realized_pnl >= 0:
             self.wins += 1
         else:
             self.losses += 1

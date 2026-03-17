@@ -161,7 +161,8 @@ def _read_trades(
     slippage_count = 0
     for event in _read_events(root_dir, bot_name, "paper_fills", day):
         payload = event["payload"]
-        pnl = float(payload.get("realized_pnl", 0.0))
+        raw_pnl = payload.get("realized_pnl")
+        pnl = float(raw_pnl) if raw_pnl is not None else 0.0
         count += 1
         realized_pnl += pnl
         if pnl > 0:

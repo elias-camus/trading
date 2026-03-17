@@ -12,8 +12,8 @@ class ExecutionResult:
     side: str
     symbol: str
     order_notional: float
-    fill_price: float
-    realized_pnl: float
+    fill_price: float | None
+    realized_pnl: float | None
     status: str
     metadata: dict[str, str] = field(default_factory=dict)
 

@@ -42,14 +42,31 @@ class BitFlyerExecutionAdapterTest(unittest.TestCase):
         self.assertEqual(result.fill_price, 0.0)
         self.assertEqual(result.realized_pnl, 0.0)
 
+    def test_dry_run_normalizes_lowercase_side(self) -> None:
+        adapter = BitFlyerExecutionAdapter(
+            api_key="key",
+            api_secret="secret",
+            mode="dry-run",
+            session=Mock(),
+        )
+
+        with patch("trading_bot.execution.bitflyer.time.time", return_value=1700000000):
+            result = adapter.execute(self._snapshot(), "buy", 250000.0)
+
+        self.assertEqual(result.side, "BUY")
+
     def test_live_mode_posts_expected_endpoint_and_body(self) -> None:
         session = Mock()
-        response = Mock()
-        response.raise_for_status.return_value = None
-        response.json.return_value = {
+        order_response = Mock()
+        order_response.raise_for_status.return_value = None
+        order_response.json.return_value = {
             "child_order_acceptance_id": "JRF20150707-000000-000000",
         }
-        session.post.return_value = response
+        executions_response = Mock()
+        executions_response.raise_for_status.return_value = None
+        executions_response.json.return_value = [{"price": 50000000, "size": 0.005}]
+        session.post.return_value = order_response
+        session.get.return_value = executions_response
         adapter = BitFlyerExecutionAdapter(
             api_key="key",
             api_secret="secret",
@@ -58,7 +75,9 @@ class BitFlyerExecutionAdapterTest(unittest.TestCase):
         )
 
         with patch("trading_bot.execution.bitflyer.time.time", return_value=1700000000):
-            adapter.execute(self._snapshot(), "SELL", 250000.0)
+            with patch("trading_bot.execution.bitflyer.time.monotonic", side_effect=[100.0, 100.1]):
+                with patch("trading_bot.execution.bitflyer.time.sleep"):
+                    adapter.execute(self._snapshot(), "sell", 250000.0)
 
         session.post.assert_called_once()
         self.assertEqual(
@@ -75,14 +94,32 @@ class BitFlyerExecutionAdapterTest(unittest.TestCase):
             },
         )
 
+    def test_raises_runtime_error_for_invalid_side(self) -> None:
+        adapter = BitFlyerExecutionAdapter(
+            api_key="key",
+            api_secret="secret",
+            mode="dry-run",
+            session=Mock(),
+        )
+
+        with self.assertRaises(RuntimeError):
+            adapter.execute(self._snapshot(), "hold", 250000.0)
+
     def test_live_mode_includes_acceptance_id_in_metadata(self) -> None:
         session = Mock()
-        response = Mock()
-        response.raise_for_status.return_value = None
-        response.json.return_value = {
+        order_response = Mock()
+        order_response.raise_for_status.return_value = None
+        order_response.json.return_value = {
             "child_order_acceptance_id": "JRF20150707-111111-222222",
         }
-        session.post.return_value = response
+        executions_response = Mock()
+        executions_response.raise_for_status.return_value = None
+        executions_response.json.return_value = [
+            {"price": 50001000, "size": 0.002},
+            {"price": 50002000, "size": 0.003},
+        ]
+        session.post.return_value = order_response
+        session.get.return_value = executions_response
         adapter = BitFlyerExecutionAdapter(
             api_key="key",
             api_secret="secret",
@@ -91,13 +128,80 @@ class BitFlyerExecutionAdapterTest(unittest.TestCase):
         )
 
         with patch("trading_bot.execution.bitflyer.time.time", return_value=1700000000):
-            result = adapter.execute(self._snapshot(), "BUY", 250000.0)
+            with patch("trading_bot.execution.bitflyer.time.monotonic", side_effect=[100.0, 100.1]):
+                with patch("trading_bot.execution.bitflyer.time.sleep"):
+                    result = adapter.execute(self._snapshot(), "BUY", 250000.0)
 
         self.assertEqual(
             result.metadata["child_order_acceptance_id"],
             "JRF20150707-111111-222222",
         )
         self.assertEqual(result.status, "submitted")
+        self.assertEqual(result.fill_price, 50001600.0)
+        self.assertIsNone(result.realized_pnl)
+        self.assertEqual(result.metadata["executed_size"], "0.00500000")
+
+    def test_live_mode_returns_none_fill_price_when_execution_is_not_ready(self) -> None:
+        session = Mock()
+        order_response = Mock()
+        order_response.raise_for_status.return_value = None
+        order_response.json.return_value = {
+            "child_order_acceptance_id": "JRF20150707-111111-222222",
+        }
+        executions_response = Mock()
+        executions_response.raise_for_status.return_value = None
+        executions_response.json.return_value = []
+        session.post.return_value = order_response
+        session.get.return_value = executions_response
+        adapter = BitFlyerExecutionAdapter(
+            api_key="key",
+            api_secret="secret",
+            mode="live",
+            session=session,
+        )
+
+        with patch("trading_bot.execution.bitflyer.time.time", return_value=1700000000):
+            with patch(
+                "trading_bot.execution.bitflyer.time.monotonic",
+                side_effect=[100.0, 100.5, 101.0, 101.5, 102.0, 102.5, 103.1],
+            ):
+                with patch("trading_bot.execution.bitflyer.time.sleep"):
+                    result = adapter.execute(self._snapshot(), "BUY", 250000.0)
+
+        self.assertIsNone(result.fill_price)
+        self.assertIsNone(result.realized_pnl)
+
+    def test_live_mode_requests_executions_by_acceptance_id(self) -> None:
+        session = Mock()
+        order_response = Mock()
+        order_response.raise_for_status.return_value = None
+        order_response.json.return_value = {
+            "child_order_acceptance_id": "JRF20150707-111111-222222",
+        }
+        executions_response = Mock()
+        executions_response.raise_for_status.return_value = None
+        executions_response.json.return_value = [{"price": 50000000, "size": 0.005}]
+        session.post.return_value = order_response
+        session.get.return_value = executions_response
+        adapter = BitFlyerExecutionAdapter(
+            api_key="key",
+            api_secret="secret",
+            mode="live",
+            session=session,
+        )
+
+        with patch("trading_bot.execution.bitflyer.time.time", return_value=1700000000):
+            with patch("trading_bot.execution.bitflyer.time.monotonic", side_effect=[100.0, 100.1]):
+                with patch("trading_bot.execution.bitflyer.time.sleep"):
+                    adapter.execute(self._snapshot(), "BUY", 250000.0)
+
+        self.assertEqual(
+            session.get.call_args.kwargs["params"],
+            {
+                "product_code": "BTC_JPY",
+                "child_order_acceptance_id": "JRF20150707-111111-222222",
+            },
+        )
 
     def test_raises_runtime_error_on_http_failure(self) -> None:
         session = Mock()
@@ -112,6 +216,27 @@ class BitFlyerExecutionAdapterTest(unittest.TestCase):
         with patch("trading_bot.execution.bitflyer.time.time", return_value=1700000000):
             with self.assertRaises(RuntimeError):
                 adapter.execute(self._snapshot(), "BUY", 250000.0)
+
+    def test_raises_runtime_error_when_fetching_executions_fails(self) -> None:
+        session = Mock()
+        order_response = Mock()
+        order_response.raise_for_status.return_value = None
+        order_response.json.return_value = {
+            "child_order_acceptance_id": "JRF20150707-111111-222222",
+        }
+        session.post.return_value = order_response
+        session.get.side_effect = requests.RequestException("boom")
+        adapter = BitFlyerExecutionAdapter(
+            api_key="key",
+            api_secret="secret",
+            mode="live",
+            session=session,
+        )
+
+        with patch("trading_bot.execution.bitflyer.time.time", return_value=1700000000):
+            with patch("trading_bot.execution.bitflyer.time.monotonic", side_effect=[100.0, 100.1]):
+                with self.assertRaises(RuntimeError):
+                    adapter.execute(self._snapshot(), "BUY", 250000.0)
 
     @staticmethod
     def _snapshot() -> MarketSnapshot:

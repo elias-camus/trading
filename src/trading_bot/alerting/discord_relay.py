@@ -7,6 +7,58 @@ from typing import Any
 from urllib import request
 
 
+def _severity_prefix(status: str, severity: str) -> str:
+    if status == "resolved":
+        return "✅"
+    if severity == "critical":
+        return "🔴"
+    if severity == "warning":
+        return "🟡"
+    return "ℹ️"
+
+
+def _format_headline(status: str, alert_name: str, severity: str) -> str:
+    prefix = _severity_prefix(status, severity)
+    if status == "resolved":
+        return f"{prefix} [{status}] {alert_name} severity={severity}"
+    if severity == "critical":
+        return f"{prefix} **[{status}] {alert_name} severity={severity}**"
+    return f"{prefix} [{status}] {alert_name} severity={severity}"
+
+
+def resolve_webhook_url() -> str | None:
+    webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
+    if webhook_url:
+        return webhook_url
+
+    secret_name = os.environ.get("DISCORD_WEBHOOK_SECRET_NAME")
+    if not secret_name:
+        return None
+
+    try:
+        import boto3
+    except ImportError as exc:
+        raise RuntimeError("boto3 is required for Discord webhook secrets") from exc
+
+    region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
+    session = boto3.session.Session(region_name=region)
+    client = session.client("secretsmanager")
+    response = client.get_secret_value(SecretId=secret_name)
+    secret_string = response.get("SecretString")
+    if secret_string is None:
+        raise ValueError("Discord webhook secret payload was empty")
+
+    try:
+        payload = json.loads(secret_string)
+    except json.JSONDecodeError:
+        return secret_string
+
+    webhook_value = payload.get("webhook_url")
+    if not webhook_value:
+        raise ValueError("Discord webhook secret must include webhook_url")
+    return str(webhook_value)
+
+
 def build_message(payload: dict[str, Any]) -> str:
     alerts = payload.get("alerts", [])
     if not alerts:
@@ -19,9 +71,18 @@ def build_message(payload: dict[str, Any]) -> str:
         annotations = alert.get("annotations", {})
         alert_name = labels.get("alertname", "unknown")
         severity = labels.get("severity", "unknown")
+        bot_name = labels.get("bot_name")
+        venue = labels.get("venue")
         summary = annotations.get("summary", "")
         description = annotations.get("description", "")
-        lines.append(f"[{status}] {alert_name} severity={severity}")
+        lines.append(_format_headline(status, alert_name, severity))
+        context_parts = []
+        if bot_name:
+            context_parts.append(f"bot={bot_name}")
+        if venue:
+            context_parts.append(f"venue={venue}")
+        if context_parts:
+            lines.append(" ".join(context_parts))
         if summary:
             lines.append(summary)
         if description:
@@ -42,7 +103,7 @@ def send_discord_message(webhook_url: str, message: str) -> None:
 
 
 def serve(host: str = "0.0.0.0", port: int = 9094) -> None:
-    webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
+    webhook_url = resolve_webhook_url()
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self) -> None:  # noqa: N802

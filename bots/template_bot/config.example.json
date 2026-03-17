@@ -1,0 +1,48 @@
+{
+  "bot": {
+    "name": "template-bot",
+    "environment": "dev",
+    "data_dir": "data/runtime",
+    "metrics_host": "127.0.0.1",
+    "metrics_port": 9200,
+    "loop_interval_ms": 200,
+    "max_iterations": 10
+  },
+  "risk": {
+    "max_position_notional": 2000.0,
+    "max_daily_loss": 300.0,
+    "max_consecutive_losses": 3,
+    "min_order_interval_seconds": 3
+  },
+  "strategy": {
+    "symbol": "BTCUSDT",
+    "base_price": 65000.0,
+    "signal_threshold_bps": 8.0,
+    "metadata": {
+      "profile": "template"
+    }
+  },
+  "market_data": {
+    "adapter": "synthetic",
+    "source": "synthetic",
+    "venue": {
+      "name": "synthetic-feed",
+      "kind": "research",
+      "symbol": "BTCUSDT"
+    },
+    "poll_interval_ms": 0,
+    "record_trades": false,
+    "record_orderbook": false
+  },
+  "execution": {
+    "mode": "paper",
+    "adapter": "paper",
+    "venue": {
+      "name": "paper-execution",
+      "kind": "paper",
+      "symbol": "BTCUSDT"
+    },
+    "order_notional": 250.0
+  },
+  "credentials": {}
+}

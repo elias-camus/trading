@@ -14,6 +14,10 @@ class SummaryResult:
     market_snapshots: int
     holds: int
     paper_trades: int
+    winning_trades: int
+    losing_trades: int
+    win_rate: float
+    average_slippage_bps: float
     risk_blocks: int
     realized_pnl: float
     blocked_reasons: dict[str, int]
@@ -25,6 +29,10 @@ class SummaryResult:
             "market_snapshots": self.market_snapshots,
             "holds": self.holds,
             "paper_trades": self.paper_trades,
+            "winning_trades": self.winning_trades,
+            "losing_trades": self.losing_trades,
+            "win_rate": round(self.win_rate, 4),
+            "average_slippage_bps": round(self.average_slippage_bps, 4),
             "risk_blocks": self.risk_blocks,
             "realized_pnl": round(self.realized_pnl, 4),
             "blocked_reasons": self.blocked_reasons,
@@ -37,18 +45,34 @@ def summarize_records(root_dir: Path, bot_name: str, dates: list[str] | None = N
     market_snapshots = 0
     holds = 0
     paper_trades = 0
+    winning_trades = 0
+    losing_trades = 0
     risk_blocks = 0
     realized_pnl = 0.0
+    slippage_total = 0.0
+    slippage_count = 0
 
     for day in selected_dates:
         market_snapshots += _count_stream(root_dir, bot_name, "market_snapshots", day)
         holds += _count_holds(root_dir, bot_name, day)
-        trade_count, trade_pnl = _read_trades(root_dir, bot_name, day)
+        trade_count, trade_pnl, wins, losses, day_slippage_total, day_slippage_count = _read_trades(
+            root_dir,
+            bot_name,
+            day,
+        )
         paper_trades += trade_count
         realized_pnl += trade_pnl
+        winning_trades += wins
+        losing_trades += losses
+        slippage_total += day_slippage_total
+        slippage_count += day_slippage_count
         block_count, reasons = _read_risk_blocks(root_dir, bot_name, day)
         risk_blocks += block_count
         blocked_reasons.update(reasons)
+
+    decided_trades = winning_trades + losing_trades
+    win_rate = winning_trades / decided_trades if decided_trades > 0 else 0.0
+    average_slippage_bps = slippage_total / slippage_count if slippage_count > 0 else 0.0
 
     return SummaryResult(
         bot_name=bot_name,
@@ -56,6 +80,10 @@ def summarize_records(root_dir: Path, bot_name: str, dates: list[str] | None = N
         market_snapshots=market_snapshots,
         holds=holds,
         paper_trades=paper_trades,
+        winning_trades=winning_trades,
+        losing_trades=losing_trades,
+        win_rate=win_rate,
+        average_slippage_bps=average_slippage_bps,
         risk_blocks=risk_blocks,
         realized_pnl=realized_pnl,
         blocked_reasons=dict(sorted(blocked_reasons.items())),
@@ -80,6 +108,10 @@ def write_summary(result: SummaryResult, output_path: Path, output_format: str) 
                     "market_snapshots",
                     "holds",
                     "paper_trades",
+                    "winning_trades",
+                    "losing_trades",
+                    "win_rate",
+                    "average_slippage_bps",
                     "risk_blocks",
                     "realized_pnl",
                     "blocked_reasons",
@@ -116,14 +148,31 @@ def _count_holds(root_dir: Path, bot_name: str, day: str) -> int:
     return count
 
 
-def _read_trades(root_dir: Path, bot_name: str, day: str) -> tuple[int, float]:
+def _read_trades(
+    root_dir: Path,
+    bot_name: str,
+    day: str,
+) -> tuple[int, float, int, int, float, int]:
     count = 0
     realized_pnl = 0.0
+    wins = 0
+    losses = 0
+    slippage_total = 0.0
+    slippage_count = 0
     for event in _read_events(root_dir, bot_name, "paper_fills", day):
         payload = event["payload"]
+        pnl = float(payload.get("realized_pnl", 0.0))
         count += 1
-        realized_pnl += float(payload.get("realized_pnl", 0.0))
-    return count, realized_pnl
+        realized_pnl += pnl
+        if pnl > 0:
+            wins += 1
+        elif pnl < 0:
+            losses += 1
+        metadata = payload.get("metadata", {})
+        if isinstance(metadata, dict) and "slippage_bps" in metadata:
+            slippage_total += float(metadata["slippage_bps"])
+            slippage_count += 1
+    return count, realized_pnl, wins, losses, slippage_total, slippage_count
 
 
 def _read_risk_blocks(root_dir: Path, bot_name: str, day: str) -> tuple[int, Counter[str]]:

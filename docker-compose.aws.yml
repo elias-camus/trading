@@ -51,6 +51,9 @@ services:
     command: ["python", "-m", "trading_bot.alerting.discord_relay"]
     environment:
       DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      DISCORD_WEBHOOK_SECRET_NAME: ${DISCORD_WEBHOOK_SECRET_NAME:-}
+      AWS_REGION: ${AWS_REGION:-}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-}
       PORT: "9094"
     ports:
       - "9094:9094"

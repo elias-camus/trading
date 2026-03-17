@@ -87,7 +87,9 @@ PYTHONPATH=src python3 -m trading_bot summarize-records --root data/runtime/reco
 - `bitflyer-dry-run` は署名とリクエスト payload を生成しますが、HTTP 送信は行いません
 - `bitflyer-live` は `POST /v1/me/sendchildorder` を送信し、`child_order_acceptance_id` を execution metadata に保存します
 - 認証情報は `execution.credentials_ref` から `credentials` セクションを引き、`env` / `inline` / `aws_secrets_manager` を使えます
-- dry-run の設定例は [config.bitflyer-dry-run.example.json](/home/ubuntu/.openclaw/workspace/trading/bots/cex_swing/config.bitflyer-dry-run.example.json) を参照してください。既存の paper 設定は [config.example.json](/home/ubuntu/.openclaw/workspace/trading/bots/cex_swing/config.example.json) に残しています
+- dry-run の設定例は [config.bitflyer-dry-run.example.json](/home/ubuntu/.openclaw/workspace/trading/bots/cex_swing/config.bitflyer-dry-run.example.json) を参照してください
+- live + Secrets Manager の設定例は [config.bitflyer-live-secrets.example.json](/home/ubuntu/.openclaw/workspace/trading/bots/cex_swing/config.bitflyer-live-secrets.example.json) を参照してください
+- 既存の paper 設定は [config.example.json](/home/ubuntu/.openclaw/workspace/trading/bots/cex_swing/config.example.json) に残しています
 
 ## テスト
 
@@ -105,7 +107,7 @@ cd /Users/toshikikobayashi/Repositories/trading
 make test
 ```
 
-AWS EC2 へ 24時間365日で常駐配備する場合は [aws-ec2-deploy.md](/Users/toshikikobayashi/Repositories/trading/docs/aws-ec2-deploy.md) を参照してください。
+AWS EC2 へ 24時間365日で常駐配備する場合は [aws-ec2-deploy.md](/Users/toshikikobayashi/Repositories/trading/docs/aws-ec2-deploy.md) を参照してください。Secrets Manager の登録例は [aws-secrets-manager.md](/home/ubuntu/.openclaw/workspace/trading/docs/aws-secrets-manager.md) にまとめています。
 
 設計の全体像は [architecture.md](/Users/toshikikobayashi/Repositories/trading/docs/architecture.md)、調査整理は [yodakaart-crypto-bot-notes.md](/Users/toshikikobayashi/Repositories/trading/yodakaart-crypto-bot-notes.md)、Discord 通知方針は [discord-alerting.md](/Users/toshikikobayashi/Repositories/trading/docs/discord-alerting.md) を参照してください。
 

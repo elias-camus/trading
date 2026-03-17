@@ -21,7 +21,7 @@
 
 ## 現在地
 
-いまは「基盤の骨組みがあり、BitFlyer の実データ adapter と実注文 adapter が入った段階」です。
+いまは「共通基盤が通り、BitFlyer 実データ・実注文・通知・Secrets・分析の最小ループが揃った段階」です。
 
 - できていること
   - 紙上実行Botを動かす
@@ -29,12 +29,17 @@
   - BitFlyer Private API へ dry-run / live で注文を組み立てて送る
   - recorder に記録する
   - recorder の日次集計を出す
+  - Bot テンプレートから新規 Bot を最小差分で追加する
   - `/metrics` を出す
   - EC2 へ常駐配備する
   - Prometheus / Grafana で監視する
+  - Discord 通知を Webhook / Bot Token の両方で送る
+  - Secrets Manager から API キーや Discord Webhook を解決する
+  - 分析ジョブで勝率・損益・スリッページを集計する
 - これから必要なこと
-  - 秘密情報の安全な取り扱い
-  - 新規Botを量産するためのテンプレート化
+  - CloudWatch Logs か Loki へのログ転送
+  - 実運用向けの戦略ロジック実装
+  - backtest / replay 基盤の整備
 
 残タスクの要約は [TODO.md](/Users/toshikikobayashi/Repositories/trading/TODO.md) にまとめています。
 

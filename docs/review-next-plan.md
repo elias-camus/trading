@@ -6,9 +6,10 @@
 - 紙上実行 Bot は動作する
 - Recorder / Metrics / Risk / RunLock の責務分離はできている
 - EC2 常駐、Prometheus、Grafana までの配備素材はある
-- ただし「量産可能な基盤」にはまだ届いていない
+- BitFlyer 実データ adapter、実注文 adapter、Secrets Manager、Discord 通知、Bot テンプレート、分析ジョブ最小版まで入った
+- 量産可能な基盤にかなり近づいたが、運用ログと戦略面はまだ薄い
 
-現時点の到達点は、`paper execution の土台が通ったプロトタイプ` です。
+現時点の到達点は、`共通基盤 + CEX 最小実装 + 通知 + secrets + 分析` が通った段階です。
 
 ## レビューで優先度が高かった論点
 
@@ -36,30 +37,30 @@
 - `paper / dry-run / live` を enum 的に扱えるようにする
 - Bot 固有設定と基盤共通設定を分離する
 
-### 3. 監視はあるが通知経路が未完成
+### 3. 運用ログの集約が未整備
 
 - Prometheus ルールはある
 - Grafana も compose に入っている
-- しかし Alertmanager と Discord 通知経路は未実装
-- `監視あり` ではなく `可視化のみ` の段階
+- Alertmanager と Discord relay も入り、Webhook / Bot Token の両経路で通知できる
+- ただし永続ログの集約先がなく、障害解析の導線はまだ弱い
 
 対応方針:
 
-- Alertmanager を compose に追加する
-- `critical` のみ先に Discord 通知する
-- Webhook URL は後続フェーズで Secrets Manager へ移す
+- CloudWatch Logs か Loki を追加する
+- コンテナログと Bot の運用ログをまとめて拾う
+- 通知とログをひもづけて原因追跡しやすくする
 
-### 4. 実データ adapter 着手前の分析導線が弱い
+### 4. 戦略ロジックと検証導線が弱い
 
-- Recorder はあるが、それを読む分析ジョブがまだない
-- 実データを取り始めても品質を評価する導線が不足する
-- TODO 上の順序より、adapter と分析を同じフェーズで進める方が安全
+- Recorder を読む分析ジョブ最小版は入った
+- ただし売買ロジック自体はまだ薄く、backtest / replay もない
+- 実データを取れても戦略改善の回転数はまだ低い
 
 対応方針:
 
-- `research/` を追加する
-- recorder から日次集計を出す CLI を先に作る
-- market snapshot 件数、hold 件数、risk block 件数、paper pnl を最低限集計する
+- `research/` に戦略別特徴量と評価を追加する
+- replay / backtest の最小版を後続で作る
+- summary CLI を戦略改善に使える粒度へ拡張する
 
 ## 次フェーズの実行順
 
@@ -81,75 +82,69 @@
 - `paper-cex-swing` が新設定で起動できる
 - 設定追加時に既存コードの変更範囲が限定される
 
-### Phase 2: 市場データの取り込み
+### Phase 2: 運用ログの整備
 
 目的:
-疑似 feed から実データ feed へ移行する
+常駐運用時の障害解析をしやすくする
 
 作業:
 
-- `MarketDataAdapter` の interface を定義する
-- research 向け venue を 1 本選ぶ
-- ticker / trades / orderbook のうち最初は ticker から始める
-- adapter 取得データを recorder に保存する
-- 切断時の再接続と失敗メトリクスを追加する
+- CloudWatch Logs か Loki を追加する
+- コンテナログの転送設定を入れる
+- Bot の runtime / risk / execution エラーを検索しやすくする
 
 完了条件:
 
-- 疑似 snapshot と実 snapshot を差し替え可能
-- 取得イベントが NDJSON に保存される
-- 接続失敗回数と最終受信時刻を metrics で見られる
+- 常駐中の例外と運用ログを横断検索できる
+- 通知発火時の前後ログを追える
 
-### Phase 3: 分析ジョブ最小版
+### Phase 3: 戦略ロジック
 
 目的:
-記録したイベントから継続改善できる状態にする
+実データを売買判断へつなげる
 
 作業:
 
-- `research/summary.py` などの集計 CLI を追加する
-- 日次の trades / holds / risk blocks / pnl を集計する
-- venue, symbol, bot name 単位で絞り込めるようにする
-- 出力はまず JSON か CSV にする
+- エントリー/イグジット条件を定義する
+- signal の説明変数を `research/` に切り出す
+- リスク制御との境界を明確化する
 
 完了条件:
 
-- 1 日分の recorder データから集計が出せる
-- 取引しなかった理由と損益の傾向を確認できる
+- synthetic ではなく実データ前提で判断が回る
+- 取引理由を recorder と summary で追える
 
-### Phase 4: 実行モードの分離
+### Phase 4: 検証ループ強化
 
 目的:
-paper と live の責務を分ける
+改善速度を上げる
 
 作業:
 
-- `ExecutionAdapter` interface を定義する
-- `paper`, `dry-run`, `live` を明示的に分岐する
-- 現在の紙上約定ロジックを `paper adapter` に移す
-- live 未実装でも interface ベースで起動可能にする
+- backtest / replay の最小版を追加する
+- summary CLI に戦略比較軸を増やす
+- 主要指標をダッシュボードへ反映する
 
 完了条件:
 
-- strategy 層が execution 実装詳細を知らない
-- mode 切り替えが config だけで済む
+- 改善案をオフラインで比較できる
+- 実運用前の検証回数を増やせる
 
-### Phase 5: 通知と secrets
+### Phase 5: 量産フェーズ
 
 目的:
-常駐運用に必要な最低限の運用安全性を作る
+Bot を増やしやすくする
 
 作業:
 
-- Alertmanager を compose に追加する
-- critical アラートの Discord 通知をつなぐ
-- credentials / webhook の参照先 abstraction を作る
-- AWS Secrets Manager 実装を追加する
+- Bot テンプレートの差分をさらに減らす
+- venue ごとの差し替え点を整理する
+- ダッシュボードや通知ルールを Bot ごとに増やしやすくする
 
 完了条件:
 
-- metrics 停止や損失閾値超えを通知できる
-- 秘密情報をコードや JSON に直書きしない
+- 新規 Bot を短時間で増やせる
+- 監視と分析も一緒に複製できる
 
 ## 直近 3 スプリントの着手単位
 
@@ -162,32 +157,30 @@ paper と live の責務を分ける
 
 ### Sprint B
 
-- market data interface
-- venue 1 本の ticker adapter
-- recorder 保存
-- reconnect metrics
+- CloudWatch Logs / Loki
+- ログ転送設定
+- 運用ログ確認手順の整備
 
 ### Sprint C
 
-- research 集計 CLI
-- 日次サマリ
-- execution interface
-- paper adapter 抽出
+- 戦略ロジック最小版
+- replay / backtest 方針
+- summary 拡張
 
 ## 着手前に決めるべきこと
 
+- CloudWatch Logs と Loki のどちらを優先するか
 - live 初号機の対象 venue をどこにするか
-- research venue と live venue を分けるか
 - テストは `unittest` 継続か `pytest` へ寄せるか
-- 実行モード名を `paper / dry-run / live` に固定するか
+- 戦略検証を replay と backtest のどちらから始めるか
 
 ## すぐ着手してよい実装候補
 
 次に着手するなら、順番はこれです。
 
-1. テスト実行経路の固定
-2. config スキーマ再設計
-3. `MarketDataAdapter` interface 追加
-4. research 集計 CLI の最小版追加
+1. CloudWatch Logs / Loki 方針決定
+2. 戦略ロジック最小版
+3. replay / backtest 最小版
+4. summary CLI 拡張
 
-この 4 点まで終わると、その後の adapter 実装がかなり進めやすくなります。
+この 4 点まで終わると、実運用と改善ループの密度がかなり上がります。

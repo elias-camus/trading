@@ -8,7 +8,7 @@
 
 - 個人運用で見やすい
 - Bot ごとにチャンネルを分けやすい
-- Webhook ベースでつなぎやすい
+- Webhook と Bot Token の両方を選べる
 
 ## 想定構成
 
@@ -17,7 +17,7 @@
 - Prometheus
 - Alertmanager
 - `discord-relay`
-- Discord Webhook
+- Discord Webhook または Discord Bot API
 
 このリポジトリでは、Alertmanager から Discord へ直接投げず、軽量な `discord-relay` を 1 つ挟む。
 
@@ -40,8 +40,8 @@
 ## 秘密情報の扱い
 
 - Discord Webhook URL はコードに直書きしない
-- compose 実行時は `DISCORD_WEBHOOK_URL` で注入する
-- live 化では AWS Secrets Manager へ移す
+- compose 実行時は `DISCORD_WEBHOOK_URL` または `DISCORD_BOT_TOKEN` / `DISCORD_CHANNEL_ID` で注入する
+- Webhook URL を使う場合は AWS Secrets Manager へ移せる
 
 ## 現在の実装
 
@@ -51,11 +51,13 @@
   - `alertmanager`, `discord-relay` を追加
 - `trading_bot.alerting.discord_relay`
   - Alertmanager payload を Discord 送信用メッセージへ変換
+  - Webhook URL または Discord Bot Token + Channel ID を解決して送信
   - `/healthz` を公開
 
-## 次の実装方針
+## 送信先の優先順位
 
-1. `DISCORD_WEBHOOK_URL` を env 直書きから Secrets Manager 参照へ移す
-2. severity ごとの文面整形を追加する
-3. bot 名や venue 名を通知文面へ含める
-4. 重要アラートだけ先に通知する
+1. `DISCORD_WEBHOOK_URL`
+2. `DISCORD_WEBHOOK_SECRET_NAME`
+3. `DISCORD_BOT_TOKEN` + `DISCORD_CHANNEL_ID`
+
+Webhook URL が設定されていればそちらを優先します。Webhook を発行したくない場合は Bot Token とチャンネル ID だけで通知できます。

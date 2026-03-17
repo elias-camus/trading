@@ -61,9 +61,9 @@
 
 ## 直近の拡張候補
 
-- 疑似 feed を取引所アダプタへ置き換える
-- Parquet 出力と分析ジョブを追加する
+- CloudWatch Logs か Loki へ運用ログを転送する
 - `research/` に戦略別の特徴量生成を切り出す
+- 戦略ロジックの検証用に backtest / replay を追加する
 - CEX 実行アダプタと DeFi 実行アダプタを分離する
 - Recorder と分析基盤を使って shadow execution を強化する
 
@@ -78,7 +78,16 @@
 - 監視と通知がある
 - 新規Botをテンプレートから増やせる
 
-現状は、このうち `paper / recorder / metrics / 常駐配備` までが入っている。
+達成状況:
+
+- 実データ取得: BitFlyer ticker で達成
+- execution 切り替え: `paper / dry-run / live` で達成
+- recorder / metrics: 達成
+- Secrets Manager: 達成
+- 監視と通知: Prometheus / Alertmanager / Discord relay で達成
+- Bot テンプレート化: 達成
+
+未達は、運用ログ転送、戦略ロジック、backtest / replay の 3 点が中心です。
 
 ## 取引所選定の前提
 

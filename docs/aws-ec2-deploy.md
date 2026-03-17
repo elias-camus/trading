@@ -35,6 +35,32 @@
   - 最初は EC2 ロール最小権限
   - 後で Secrets Manager や CloudWatch を足す
 
+## 必要なAPIキーと認証情報の一覧
+
+- BitFlyer API キー
+  - 実注文を出す `bitflyer-live` で必要
+  - paper / dry-run だけなら不要
+- AWS IAM ロール
+  - EC2 に `secretsmanager:GetSecretValue` を付与して Secrets Manager を読む
+  - Access Key を配るより EC2 ロール前提を推奨
+- Discord 通知
+  - `DISCORD_WEBHOOK_URL` または `DISCORD_WEBHOOK_SECRET_NAME`
+  - もしくは `DISCORD_BOT_TOKEN` と `DISCORD_CHANNEL_ID`
+  - Webhook と Bot Token の両方は不要
+
+## 最小構成で動かすために必要なもの
+
+優先度順に並べると次です。
+
+1. EC2 本体と Docker 実行環境
+2. Bot 設定ファイル
+3. Discord 通知先
+   - Webhook URL か Bot Token のどちらか
+4. AWS IAM ロール
+   - Secrets Manager を使う場合のみ必須
+5. BitFlyer API キー
+   - live 注文を出す場合のみ必須
+
 ## 費用感
 
 基準日: 2026-03-14  
@@ -150,7 +176,7 @@ sudo systemctl status trading-stack
 ## 運用上の注意
 
 - まずは紙上実行のまま回す
-- API キーはまだコンテナに入れない
+- API キーは env 直書きより Secrets Manager + EC2 ロールを優先する
 - `9464` は全世界公開せず、自分のIPに絞る
 - `9090`, `9093`, `3000` も全世界公開しない
 - 実取引用 Bot を動かす前に CloudWatch Logs か Loki 系へログ転送を足す
@@ -158,12 +184,11 @@ sudo systemctl status trading-stack
 
 ## 次にやること
 
-- CEX の実データ adapter を追加する
 - Prometheus で `9464/metrics` を scrape する
 - Grafana で `loop_latency_ms`, `risk_blocks_total`, `daily_realized_pnl` を可視化する
-- Secrets Manager から API キーを読む構成にする
 - Grafana の初期パスワードはデフォルトのまま使わず変更する
-- `DISCORD_WEBHOOK_URL` を env 直書きから Secrets Manager 参照へ移す
+- CloudWatch Logs か Loki へログ転送する
+- 戦略ロジックを実データ前提で詰める
 
 基盤完成までの全体 TODO は [TODO.md](/Users/toshikikobayashi/Repositories/trading/TODO.md) を参照。
 

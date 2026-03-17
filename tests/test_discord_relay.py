@@ -5,7 +5,13 @@ import types
 import unittest
 from unittest.mock import Mock, patch
 
-from trading_bot.alerting.discord_relay import build_message, resolve_webhook_url, send_discord_message
+from trading_bot.alerting.discord_relay import (
+    build_message,
+    resolve_discord_delivery_target,
+    resolve_webhook_url,
+    send_discord_bot_message,
+    send_discord_message,
+)
 
 
 class DiscordRelayMessageTest(unittest.TestCase):
@@ -130,6 +136,48 @@ class DiscordRelayWebhookResolutionTest(unittest.TestCase):
         mock_session.client.assert_called_once_with("secretsmanager")
         mock_client.get_secret_value.assert_called_once_with(SecretId="trading/discord")
 
+    def test_resolve_discord_delivery_target_prefers_webhook_env_over_bot(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "DISCORD_WEBHOOK_URL": "https://discord.test/from-env",
+                "DISCORD_BOT_TOKEN": "bot-token",
+                "DISCORD_CHANNEL_ID": "12345",
+            },
+            clear=True,
+        ):
+            target = resolve_discord_delivery_target()
+
+        self.assertEqual(target.mode, "webhook")
+        self.assertEqual(target.webhook_url, "https://discord.test/from-env")
+        self.assertIsNone(target.bot_token)
+        self.assertIsNone(target.channel_id)
+
+    def test_resolve_discord_delivery_target_falls_back_to_bot(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "DISCORD_BOT_TOKEN": "bot-token",
+                "DISCORD_CHANNEL_ID": "12345",
+            },
+            clear=True,
+        ):
+            target = resolve_discord_delivery_target()
+
+        self.assertEqual(target.mode, "bot")
+        self.assertEqual(target.bot_token, "bot-token")
+        self.assertEqual(target.channel_id, "12345")
+        self.assertIsNone(target.webhook_url)
+
+    def test_resolve_discord_delivery_target_returns_none_when_unconfigured(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            target = resolve_discord_delivery_target()
+
+        self.assertEqual(target.mode, "none")
+        self.assertIsNone(target.webhook_url)
+        self.assertIsNone(target.bot_token)
+        self.assertIsNone(target.channel_id)
+
 
 class DiscordRelayHttpTest(unittest.TestCase):
     def test_send_discord_message_posts_json_payload(self) -> None:
@@ -143,5 +191,21 @@ class DiscordRelayHttpTest(unittest.TestCase):
         req = mock_urlopen.call_args.args[0]
         self.assertEqual(req.full_url, "https://discord.test/webhook")
         self.assertEqual(req.get_method(), "POST")
+        self.assertEqual(req.headers["Content-type"], "application/json")
+        self.assertEqual(json.loads(req.data.decode("utf-8")), {"content": "hello"})
+
+    def test_send_discord_bot_message_posts_json_payload(self) -> None:
+        response = Mock()
+        response.status = 200
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+
+        with patch("trading_bot.alerting.discord_relay.request.urlopen", return_value=response) as mock_urlopen:
+            send_discord_bot_message("bot-token", "12345", "hello")
+
+        req = mock_urlopen.call_args.args[0]
+        self.assertEqual(req.full_url, "https://discord.com/api/v10/channels/12345/messages")
+        self.assertEqual(req.get_method(), "POST")
+        self.assertEqual(req.headers["Authorization"], "Bot bot-token")
         self.assertEqual(req.headers["Content-type"], "application/json")
         self.assertEqual(json.loads(req.data.decode("utf-8")), {"content": "hello"})

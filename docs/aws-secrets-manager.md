@@ -2,7 +2,7 @@
 
 ## 概要
 
-このリポジトリでは、取引所 API キーと Discord Webhook URL を環境変数へ直書きせず、AWS Secrets Manager から取得できます。
+このリポジトリでは、取引所 API キーと Discord 通知用の Webhook URL を環境変数へ直書きせず、AWS Secrets Manager から取得できます。
 
 対象:
 
@@ -55,12 +55,15 @@ aws secretsmanager create-secret \
 
 `execution.credentials_ref` でこの `bitflyer` を参照すると、実行時に Secrets Manager から `api_key` と `api_secret` を解決します。
 
-## Discord Webhook の使い方
+## Discord 通知の使い方
 
-`discord_relay` は次の順で Webhook URL を解決します。
+`discord_relay` は次の優先順位で送信先を解決します。
 
 1. `DISCORD_WEBHOOK_URL`
 2. `DISCORD_WEBHOOK_SECRET_NAME`
+3. `DISCORD_BOT_TOKEN` + `DISCORD_CHANNEL_ID`
+
+`DISCORD_WEBHOOK_URL` または `DISCORD_WEBHOOK_SECRET_NAME` があれば Webhook モードで送ります。Webhook がなく、`DISCORD_BOT_TOKEN` と `DISCORD_CHANNEL_ID` の両方があれば Bot モードで `POST /api/v10/channels/{channel_id}/messages` を使って送ります。
 
 Secrets Manager を使う場合の `SecretString` は次の JSON を推奨します。
 
@@ -77,7 +80,28 @@ export DISCORD_WEBHOOK_SECRET_NAME=trading-bot/discord-webhook
 export AWS_REGION=ap-northeast-1
 ```
 
-`DISCORD_WEBHOOK_URL` が設定されている場合はそちらが優先されます。
+OpenClaw の既存 Discord Bot を使う場合は Webhook URL を発行せず、OpenClaw が動いているサーバーで次を設定します。
+
+```bash
+export DISCORD_BOT_TOKEN=YOUR_OPENCLAW_BOT_TOKEN
+export DISCORD_CHANNEL_ID=123456789012345678
+```
+
+- `DISCORD_BOT_TOKEN`: サーバー上で既に運用している Discord Bot の token
+- `DISCORD_CHANNEL_ID`: 通知を受けたい Discord チャンネル ID
+
+`docker-compose.aws.yml` で渡す場合は次のように `.env` か shell 環境変数へ設定します。
+
+```bash
+export DISCORD_WEBHOOK_URL=
+export DISCORD_WEBHOOK_SECRET_NAME=
+export DISCORD_BOT_TOKEN=YOUR_OPENCLAW_BOT_TOKEN
+export DISCORD_CHANNEL_ID=123456789012345678
+export AWS_REGION=ap-northeast-1
+docker compose -f docker-compose.aws.yml up -d --build
+```
+
+Webhook URL を使う場合は `DISCORD_WEBHOOK_URL` または `DISCORD_WEBHOOK_SECRET_NAME` のどちらかだけ設定すれば十分です。Webhook と Bot Token の両方を入れた場合は Webhook が優先されます。
 
 ## IAM 最小権限例
 

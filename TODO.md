@@ -25,20 +25,29 @@
 - BitFlyer adapter
   - HTTP Public API の market data
   - Private API の実注文 dry-run / live
+- Secrets Manager 連携
+  - 取引所 API キーを AWS Secrets Manager から解決できる
+  - Discord Webhook URL を AWS Secrets Manager から解決できる
 - 監視の骨組み
   - Prometheus
   - Grafana
   - 基本アラート
+- Discord 通知
+  - Webhook URL
+  - Discord Bot Token + Channel ID
+- Bot テンプレート化
+  - 最小差分で新規 Bot を追加できる
+- 分析ジョブ最小版
+  - 勝率
+  - 損益
+  - slippage
 
 まだ足りないこと:
 
-- 日本居住者向けの取引所選定
-- 実取引所データ adapter
-- Secrets Manager 連携
-- ログ集約
-- バックテスト/分析ジョブ
-- Bot テンプレート化
-- Discord 通知
+- 日本居住者向けの取引所選定の具体化
+- CloudWatch Logs か Loki へのログ集約
+- 実運用向け戦略ロジック
+- backtest / replay 基盤
 
 ## 基盤完成までの残タスク
 
@@ -48,34 +57,36 @@
   - 現物の初期対象を国内登録業者から選ぶ
   - レバレッジの初期対象も国内 API 対応可否で絞る
   - 海外取引所は research 用と live 用を分ける
-- CEX 実データ adapter を作る
-  - WebSocket で ticker / trades / orderbook を取る
-  - recorder にそのまま保存する
 - config を戦略共通と取引所共通に分ける
   - symbol
   - venue
   - credentials 参照先
   - 実行モード
-- Bot テンプレートを作る
-  - 新規Botを 1 ディレクトリ追加すれば作り始められる状態にする
-- 分析ジョブの最小版を作る
-  - 日次集計
-  - 勝率
-  - 損益
-  - slippage
-  - 理由別ブロック数
+- 戦略ロジックを作る
+  - 実シグナル生成
+  - エントリー/イグジット条件
+  - 理由別ブロック数の分析改善
 
 ### 優先度B: 実運用に近づける
 
+- [x] CEX 実データ adapter を作る
+  - BitFlyer HTTP Public API の ticker
 - [x] 実注文 adapter を作る
   - paper
   - dry-run
   - live の 3 モード
-- Secrets Manager から API キーを読む
-- CloudWatch Logs か Loki にログ転送する
-- Alertmanager と Discord 通知をつなぐ
+- [x] Secrets Manager から API キーを読む
+- [x] Alertmanager と Discord 通知をつなぐ
   - Discord を標準通知先にする
-  - Webhook URL は Secrets Manager で管理する
+  - Webhook URL / Bot Token の両方に対応する
+- [x] Bot テンプレートを作る
+  - 新規Botを 1 ディレクトリ追加すれば作り始められる状態にする
+- [x] 分析ジョブの最小版を作る
+  - 日次集計
+  - 勝率
+  - 損益
+  - slippage
+- CloudWatch Logs か Loki にログ転送する
 
 ### 優先度C: 量産フェーズで効く
 
@@ -97,17 +108,15 @@
 
 この状態までの最短順序:
 
-1. CEX 実データ adapter
-2. 分析ジョブ最小版
-3. 実注文 adapter
-4. Secrets Manager
-5. 通知付き監視
-6. Bot テンプレート化
+1. 戦略ロジック実装
+2. CloudWatch Logs / Loki
+3. backtest / replay 基盤
+4. Grafana ダッシュボードのコード管理
 
 ## 直近の実装候補
 
 - 国内登録業者を優先して market data adapter を 1 本作る
 - `research/` に recorder から読む集計スクリプトを置く
-- `bots/cex_swing/` をサンプル設定置き場から Bot 雛形へ格上げする
 - Grafana ダッシュボード JSON を追加する
-- Alertmanager + Discord Webhook の通知経路を追加する
+- CloudWatch Logs か Loki への出力経路を追加する
+- 実シグナル生成ロジックを最小版で入れる

@@ -5,6 +5,7 @@ from trading_bot.core.secrets import resolve_credentials
 from trading_bot.execution.base import ExecutionAdapter
 from trading_bot.execution.bitflyer import BitFlyerExecutionAdapter
 from trading_bot.execution.dry_run import DryRunExecutionAdapter
+from trading_bot.execution.moomoo import MoomooExecutionAdapter
 from trading_bot.execution.paper import PaperExecutionAdapter
 
 
@@ -27,6 +28,20 @@ def build_execution_adapter(config: AppConfig) -> ExecutionAdapter:
             api_key=credentials.api_key,
             api_secret=credentials.api_secret,
             mode="live",
+        )
+    if adapter == "moomoo-dry-run":
+        credentials = _resolve_execution_credentials(config)
+        return MoomooExecutionAdapter(
+            trade_unlock_pwd=credentials.api_secret,
+            mode="dry-run",
+        )
+    if adapter == "moomoo-live":
+        import moomoo
+        credentials = _resolve_execution_credentials(config)
+        return MoomooExecutionAdapter(
+            trade_unlock_pwd=credentials.api_secret,
+            mode="live",
+            trd_env=moomoo.TrdEnv.REAL,
         )
     if adapter == "live":
         raise NotImplementedError("Live execution adapter is not implemented yet")

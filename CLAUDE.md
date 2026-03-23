@@ -2,9 +2,52 @@
 
 ## このリポジトリの目的
 
-仮想通貨の自動売買 Bot を量産・運用するための Python フレームワーク。
+仮想通貨・米国株の自動売買 Bot を量産・運用するための Python フレームワーク。
 基盤（データ取得・注文・リスク管理・記録・監視・通知・デプロイ）は完成済み。
 **やるべきことは戦略ロジックの開発とテスト。**
+
+## 対応取引所
+
+| 取引所 | 対象 | market_data adapter | execution adapter | 状態 |
+|---|---|---|---|---|
+| BitFlyer | BTC/JPY 等 | `bitflyer` | `bitflyer-dry-run` / `bitflyer-live` | 本番稼働中 |
+| moomoo (OpenD) | 米国株 | `moomoo` | `moomoo-dry-run` / `moomoo-live` | 実装済み・アカウント取得待ち |
+| synthetic | テスト用 | `synthetic` | `paper` | テスト専用 |
+
+### moomoo のセットアップ手順（アカウント取得後）
+
+1. `OpenD.xml` に認証情報を設定:
+   ```xml
+   <login_account>your_account</login_account>
+   <login_pwd>your_password</login_pwd>
+   ```
+2. OpenD バイナリを起動（port 11111 がオープンする）:
+   ```bash
+   "/path/to/moomoo_OpenD.../OpenD.app/Contents/MacOS/OpenD" &
+   ```
+3. trade unlock password を credentials に設定（`api_secret` に格納）
+4. `bots/moomoo_paper_bot/config.example.json` を `config.json` にコピーして編集
+5. ペーパー取引で動作確認:
+   ```bash
+   PYTHONPATH=src python3 -m trading_bot run-paper-bot --config bots/moomoo_paper_bot/config.json
+   ```
+
+### moomoo execution adapter の認証情報設定
+
+`config.json` の `credentials` セクションに trade unlock password を設定:
+```json
+"credentials": {
+  "moomoo-trade": {
+    "provider": "env",
+    "api_secret_env": "MOOMOO_TRADE_PWD"
+  }
+}
+```
+`execution.credentials_ref` を `"moomoo-trade"` に設定し、`moomoo-dry-run` または `moomoo-live` adapter を指定する。
+
+### moomoo シンボル形式
+
+`"US.AAPL"`, `"US.TSLA"`, `"US.NVDA"` など（`US.` プレフィックス必須）。
 
 ## 戦略を追加する手順
 
